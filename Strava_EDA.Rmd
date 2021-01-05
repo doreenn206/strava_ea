@@ -1,0 +1,326 @@
+---
+title: "NGUYEN_INFO370-Assignment3"
+output: html_document
+---
+
+## Doreen Nguyen 
+## Assignment 3 – INFO370 Data Science 
+
+### Exploratory Data Analysis
+
+To commence, Strava is an app design for a physically active audience as it gathers tracking activity data in order to easily analyze a user’s performance. It takes away the nuance of building your own analyzation tools and gives the overall and individual workout summary details without any effort on the user’s part.  
+
+In particular, this Strava dataset contains 53 variables that mostly focus on characteristics of their workout such as type, average speed, distance, time and fewer details about personal information such as sex and location. Their tracked variables heavily rely on workout information in order to support their purpose of analyzing performance.   
+
+
+### Data Preparation/Cleaning
+<b>Question 1: Do men tend to exercise more intensely (taking into account both distance and speed) than women?</b>
+
+Because this question only asks to take into account these two variables, a simple cleaning just includes these columns where other variables that don’t contribute to the definition of “intensity” are excluded.  
+I initially calculated a time column = distance col/speed col but it was nearly similar to values of moving time.   
+
+Initial Cleaning Steps:  
+1.	Group data by gender: male, female   
+2.	Keep columns of speed, distance   
+3.	Remove all entries that contain…  
+<ul> 
+<li>0’s in either speed, distance, moving time (null entries)   </li>
+<li>NaN or Inf rows   </li>
+<li>moving time that is greater than elapsed time (doesn’t make sense so it must me a data entry error) </li>
+<li>Outliers from the equation 1.5*IQR using a function</li>
+</ul>
+
+Dataset result: 2 Total   
+1.	Males  Columns: Speed, Distance, Moving Time 
+2.	Female  Columns: Speed, Distance, Moving Time  
+
+Further Cleaning Steps (adding/looking at more variables): 
+
+While keeping the two previous datasets that look at speed and distance, I wanted to look at other variables that may contribute to the definition of “intense” to see if these averages differ from speed and distance.  
+
+<ul>
+- Type of Workout: Allowing all types of workouts in one dataset allow for a large range values, by splitting them up, we have smaller subsets and can compare means of more similar categories. Since ride and runs have significantly the most number of types, I chose these categories.
+- Moving Time: The equation for time is distance/speed, which is moving time. I also removed moving time that is greater than elapsed time as mentioned previously because it doesn't make sense to do so.
+</ul>
+
+Dataset result: 4 Total  
+<ol>
+1.	Males/Ride Only  Columns: Speed, Distance 
+2.	Males/Run Only  Repeat columns above    
+3.	Females/Ride Only  Repeat columns above    
+4.	Females/Ride Only  Repeat columns above    
+</ol>
+
+<b>Question 2: How do countries vary in their average lengths of workouts? </b>  
+
+I wanted to pratice/challenge myself to visually representing the spread of data throughout the world by making a map graph as well as comparing means of countries to the US to see how they compare. 
+
+I used same cleaned dataset base from question 1. 
+Inital Cleaning Steps:  
+
+Visual Dataframe: 
+<ul>
+- Remove all rows where long/lat and country name are blank  
+- Convert to numeric characters to plot  
+- Remove all columns except athlete.country, moving_time, start_latitude, start_longitude  
+</ul>
+
+Dataset Result: 
+Sorted by country: Country, moving_time, long, lat  
+
+Analyzing Data:   
+<ul>
+- Keep columns country  
+- Add column of counts by country   
+- Add column of means of workout lengths   
+</ul>
+
+Dataset Result:  
+Sorted by country: Country, count of country entries, mean of moving distance    
+
+### Statistical Modeling
+Question 1: 
+
+We are focusing on two main variables for this test: distance and average speed. 
+By comparing the means of certain columns of Strava dataset, we are able to use a two sided t-test to determine whether or not there is a significant statistical difference in the population means (distance and speed) in the two groups and answer if men exercise more rigorously than women.   
+Two-Sided t-test is for hypothesis testing where the average difference between two groups (male and female) is really significant or if its due to just random chance. Since we are given a random set of users, a two-sample t-test is the best choice to to attempt to answer this question. 
+
+<b>Two-Sided T-Test - Time, Distance and Time</b>
+<ul>
+- Null Hypothesis: There is no difference between male and female workout intensity. (They workout with the same intensity) 
+- Alternative Hypothesis: There is a statistically significant difference between male and female workout intensity. 
+</ul>
+
+<b>Distance:</b>   
+<ul>Null Hypothesis: The means of male and female workout distances are the same.   
+Alternative Hypothesis: The means of male and female distances are statistically significantly more in distances.</ul>  
+
+<b>Speed:</b>   
+<ul>Null Hypothesis: The means of male and female workout speeds are the same.  
+Alternative Hypothesis: The means of male and female distances are statistically significantly more in speeds.</ul>  
+
+```{r dfSetup, echo=FALSE, warning=FALSE,include=FALSE}
+# Code to clean up the data 
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+df <- read.csv("strava_activity.csv", header = FALSE)
+col_names <- c("achievement_count","athlete.badge_type_id","athlete.city", "athlete.country", "athlete.premium","athlete.resource_state","athlete.sex","athlete.state","athlete_count","average_cadence",
+"average_heartrate","average_speed","average_temp","average_watts","comment_count","commute", "device_watts","distance","elapsed_time","elev_high","elev_low","end_latlng","flagged","gear_id",
+"has_heartrate","has_kudoed","kilojoules","kudos_count","location_city","location_country","location_state",
+"manual","max_heartrate","vmax_speed","max_watts","moving_time","name","photo_count","private","resource_state",
+"start_date","start_date_local","start_latitude","start_latlng","start_longitude","suffer_score",
+"timezone","total_elevation_gain","total_photo_count","trainer","type","weighted_average_watts","workout_type")
+df <- setNames(df, col_names)
+df <- tail(df, -1) 
+df$distance <- as.numeric(as.character(df$distance))
+df$average_speed <- as.numeric(as.character(df$average_speed))
+df$elapsed_time <- as.numeric(as.character(df$elapsed_time))
+df$moving_time <- as.numeric(as.character(df$moving_time))
+df$time_rest <- as.numeric(as.character(df$elapsed_time)) - as.numeric(as.character(df$moving_time))
+df <- filter(df, athlete.sex == "M" | athlete.sex == "F")
+df <- filter(df, distance > 0 & average_speed > 0 & moving_time > 0 & (moving_time < elapsed_time))
+df <- na.omit(df)
+
+# Function to get rid of outliers 
+clean <- function(df, measurement) {
+  IQR <- quantile(measurement)
+  limit <- (IQR[4] - IQR[2]) * 1.5
+  df <- filter(df, measurement > (IQR[2] - limit) & measurement < (IQR[3] + limit))
+  return(df)
+}
+df <- clean(df, df$average_speed) 
+df <- clean(df, df$distance)
+
+```
+
+``` {r makeDF, echo=FALSE, warning=FALSE,include=FALSE}
+# Data sorted by gender, select desired columns
+male_df <- filter(df, athlete.sex == "M") %>% select(athlete.sex, distance, average_speed, elapsed_time, moving_time, time_rest, type) 
+female_df <- filter(df, athlete.sex == "F") %>% select(athlete.sex, distance, average_speed, elapsed_time, moving_time, time_rest, type) 
+
+# Data sorted by ride and run types as they are the most relevant 
+male_ride <- filter(df, type == "Ride" & athlete.sex=="M") %>% select(distance, average_speed) 
+female_ride <- filter(df, type == "Ride" & athlete.sex=="F") %>% select(distance, average_speed) 
+male_run <- filter(df, type == "Run" & athlete.sex=="M") %>% select(distance, average_speed) 
+female_run <- filter(df, type == "Run" & athlete.sex=="F") %>% select(distance, average_speed) 
+
+```
+
+Question 2: 
+After observing our datasets, it is clear that the largest number of users come from the US (1666) and from the UK (1245).
+Since we are comparing the average means of time work outs, I would use a t-test in order to see if there is a statistical significance between the means of the US and the UK. 
+Null Hypothesis: There is no difference between the lengths of workouts between the US and the UK. 
+Alternative Hypothesis: There is a significant statistical difference in length of workout between the US and the UK. 
+``` {r q2setup, echo=FALSE}
+# t-test for US and UK 
+US <- filter(df, df$athlete.country == "United States" & df$moving_time > 0)
+UK <- filter(df, df$athlete.country == "United Kingdom" & df$moving_time > 0)
+ 
+us_uk <- t.test(US$moving_time, UK$moving_time)
+
+df$start_latitude = as.numeric(as.character(df$start_latitude)) 
+df$start_longitude = as.numeric(as.character(df$start_longitude))
+
+country_df <- filter(df, df$athlete.country != "" & df$start_latitude != "" & df$start_longitude != "") %>% select(athlete.country, athlete.city, moving_time, start_latitude, start_longitude)
+unq_coun <- df %>% group_by(df$athlete.country) %>% summarise(count=n())
+unq_coun <- unq_coun[-1,] 
+means <- country_df %>% select(athlete.country, moving_time)
+
+means <- aggregate(country_df$moving_time, list(country_df$athlete.country), mean)
+means <- setNames(means, c("Country", "Average_Length_Workout")) 
+means$count <- unq_coun$count
+
+long <- country_df$start_longitude
+lat <- country_df$start_latitude
+```
+
+### Results 
+``` {r ttests, echo=FALSE}
+# Running two sided t-test to compare means 
+distance_test <- t.test(male_df$distance, female_df$distance)
+speed_test <- t.test(male_df$average_speed, female_df$average_speed)
+
+dis_ride <- t.test(male_ride$distance, female_ride$distance)
+dis_run <- t.test(male_run$distance, female_run$distance)
+
+speed_run <- t.test(male_run$average_speed, female_run$average_speed)
+speed_ride <- t.test(male_ride$average_speed, female_run$average_speed)
+
+```
+
+<b>Question 1.</b>   
+Results of the two-sided t-test using t.test in R:   
+Using a critical value of .05…  
+
+<b>Two-Sample T-Tests</b>  
+<b>Distance:</b>   
+Results: 
+All Workout Types: p-value = 2.2e-16. 
+
+Rides: p-value = 1.148e-07
+
+Runs: p-value = 7.053e-15  
+
+Since the p-value < critical value, we reject the null hypothesis and claim that the distance means of males are statistically significantly greater than females.    
+
+<b>Speed:</b>    
+Results: 
+All Workout Types: p-value = 2.2e-16.   
+
+Rides: p-value = 2.2e-16
+
+Runes: p-value = 2.2e-16
+
+Since the p-value < critical value for all types, rides and runs, we reject the null hypothesis and claim that the speed means of males are statistically significantly greater than females.  
+
+<b>Visual Representation</b>   
+The visual representation shows the spread and distributions of the average speeds and distances with both genders together and individually.
+
+The histogram gives a great idea representation of the distribution, while the box plot gives a better representation of the range and highlights the quantiles. 
+One noticible feature is that females distances are much more right skewed than males. For speeds, males seem to have a more normal distribution than females with less of a jump going down in frequencies on the right. 
+
+In the box plots, you can visually see that for both speeds and distances, the max/mins, means, and overall quantiles are higher for males than females. 
+``` {r visual, echo=FALSE, warning=FALSE, message=FALSE, fig.width = 20}
+library(gridExtra)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+make_boxplot <- function(data, ydata, title, ytitle) {
+  plot <- ggplot(data, aes(x = athlete.sex, y = ydata)) + geom_boxplot(aes(fill=athlete.sex)) + ggtitle(title) + 
+    scale_y_continuous(name = ytitle)  + scale_x_discrete(name = "Gender") + stat_summary(geom="text", fun.y=quantile,
+                                                                                          aes(angle=45,label=sprintf("%1.1f", ..y..), color=athlete.sex),
+                                                                                          position=position_nudge(x=0.5), size=2) +
+    theme_bw() + coord_flip()
+  return(plot)
+}
+
+# All Types Distance/Speed/Time Boxplots
+distance_boxplot <- make_boxplot(df, df$distance, "Average Distance Boxplot by Gender", "Distance in meters")
+speed_boxplot <- make_boxplot(df, df$average_speed, "Average Speed Boxplot by Gender", "Speed in m/s")
+
+plot_m_d <- ggplot(data=male_df, aes(male_df$distance)) + geom_histogram( 
+                 col="blue", 
+                 aes(fill=..count..)) + labs(title="Histogram Avg of Male Distances") +
+  labs(x="Distance in m", y="Count")
+
+plot_f_d <- ggplot(data=female_df, aes(female_df$distance)) + geom_histogram( 
+                 col="blue", 
+                 aes(fill=..count..)) + labs(title="Histogram Avg of Female Distances") +
+  labs(x="Distance in m", y="Count")
+
+plot_m_s <- ggplot(data=male_df, aes(male_df$average_speed)) + geom_histogram( 
+                 col="red", 
+                 aes(fill=..count..)) + labs(title="Histogram Avg of Male Speeds") +
+  labs(x="Speed in m/s", y="Count")
+
+plot_f_s <- ggplot(data=female_df, aes(female_df$average_speed)) + geom_histogram( 
+                 col="red", 
+                 aes(fill=..count..)) + labs(title="Histogram Avg of Female Speeds") +
+  labs(x="Speed in m/s", y="Count")
+
+
+grid.arrange(plot_m_d, plot_f_d, plot_m_s, plot_f_s, ncol=4)
+grid.arrange(speed_boxplot, distance_boxplot, ncol=2)
+```
+
+<b>Question 2</b>  
+
+Calculated p-value = 0.0003372.  
+Since we are using a critical value of .05, we reject the null hypothesis and accept the alternative hypthesis that the length of workouts between the UK and the US are different.   
+
+Rather than doing a histogram similar to the first question, I used ggplot's map feature in order to plot all the users coordinates to better grasp the spread of Strava users throughout the world. 
+
+``` {r q2Visual, echo=FALSE}
+# Comparing UK and US data
+US <- filter(df, df$athlete.country == "United States" & df$moving_time > 0)
+UK <- filter(df, df$athlete.country == "United Kingdom" & df$moving_time > 0)
+US <- clean(US, US$moving_time)
+UK <- clean(UK, UK$moving_time)
+
+us_uk <- t.test(US$moving_time, UK$moving_time)
+
+# Saving coordinate data 
+long <- country_df$start_longitude
+lat <- country_df$start_latitude
+
+world_map <- map_data("world")
+p <- ggplot() + coord_fixed() + xlab("Longitude") + ylab("Latitude")
+
+#Add map to base plot
+base_world <- p + geom_polygon(data=world_map, aes(x=long, y=lat, group=group), 
+                               colour="light blue", fill="light blue")
+
+cleanup <- 
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'), 
+        axis.line = element_line(colour = "white"), legend.position="none",
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank())
+
+base_world_clean <- base_world + cleanup
+
+map_data <- base_world_clean + 
+  geom_point(data=country_df, 
+             aes(x=start_longitude, y=start_latitude, color=moving_time),  
+             fill="light green",pch=21, alpha=I(0.7)) 
+map_data
+
+```
+
+### Discussion 
+<b>Question 1:</b>
+
+Given that all the p-values were less than the critival values for all two-sided t-tests, I would conclude that if given similar data and similarly contrusted hypothesis, males do exersize statistically significantly more intensely than females. 
+However, there are many factors that may skew this data. While this is a randomly chosen dataset, types of workouts may drastically change the average. For example, if one gender has a higher number of rides than runs, it is most likely that the average distance and speeds will be higher as well.  
+Given our result, I would assume that men who are more physically stronger and bigger built would inevitably workout more intensely than women. 
+
+<b>Question 2:</b>
+
+The attempt the group countries and find averages of how data vary resulted in only having two countries with large enough counts to compare. Nearly half of countries only had a count of 10 or less, which was insufficient for our analysis to compare Strava users worldwide. With the two groups of US and the UK, we can conclude that the two do not have statistically significant similar length workouts. 
+As for spread of users, you can see that the majority of the users are in heavy use in the North America, Europe, and South America. This would assume that because the app itself caters to English speaking users, there is less data obtained from other users who do not.   
+
+
+References: 
+Plotting maps for question 2: https://sarahleejane.github.io/learning/r/2014/09/21/plotting-data-points-on-maps-with-r.html
